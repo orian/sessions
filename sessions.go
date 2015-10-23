@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/context"
+	"golang.org/x/net/context"
 )
 
 // Default flashes key.
@@ -90,8 +90,8 @@ func (s *Session) AddFlash(value interface{}, vars ...string) {
 // Save is a convenience method to save this session. It is the same as calling
 // store.Save(request, response, session). You should call Save before writing to
 // the response or returning from the handler.
-func (s *Session) Save(r *http.Request, w http.ResponseWriter) error {
-	return s.store.Save(r, w, s)
+func (s *Session) Save(c context.Context, r *http.Request, w http.ResponseWriter) error {
+	return s.store.Save(c, r, w, s)
 }
 
 // Name returns the name used to register the session.
@@ -112,24 +112,22 @@ type sessionInfo struct {
 	e error
 }
 
-// contextKey is the type used to store the registry in the context.
-type contextKey int
-
 // registryKey is the key used to store the registry in the context.
-const registryKey contextKey = 0
+var registryKey = "registry key"
 
-// GetRegistry returns a registry instance for the current request.
-func GetRegistry(r *http.Request) *Registry {
-	registry := context.Get(r, registryKey)
-	if registry != nil {
-		return registry.(*Registry)
-	}
+// RegistryWithContext returns a new context with a context created for a request.
+func RegistryWithContext(parent context.Context, r *http.Request) context.Context {
 	newRegistry := &Registry{
 		request:  r,
 		sessions: make(map[string]sessionInfo),
 	}
-	context.Set(r, registryKey, newRegistry)
-	return newRegistry
+	return context.WithValue(parent, &registryKey, newRegistry)
+}
+
+// RegistryFromContext returns a registry previously encoded in Context.
+func RegistryFromContext(c context.Context) (*Registry, bool) {
+	r, ok := c.Value(&registryKey).(*Registry)
+	return r, ok
 }
 
 // Registry stores sessions used during a request.
@@ -154,14 +152,14 @@ func (s *Registry) Get(store Store, name string) (session *Session, err error) {
 }
 
 // Save saves all sessions registered for the current request.
-func (s *Registry) Save(w http.ResponseWriter) error {
+func (s *Registry) Save(c context.Context, w http.ResponseWriter) error {
 	var errMulti MultiError
 	for name, info := range s.sessions {
 		session := info.s
 		if session.store == nil {
 			errMulti = append(errMulti, fmt.Errorf(
 				"sessions: missing store for session %q", name))
-		} else if err := session.store.Save(s.request, w, session); err != nil {
+		} else if err := session.store.Save(c, s.request, w, session); err != nil {
 			errMulti = append(errMulti, fmt.Errorf(
 				"sessions: error saving session %q -- %v", name, err))
 		}
@@ -179,8 +177,12 @@ func init() {
 }
 
 // Save saves all sessions used during the current request.
-func Save(r *http.Request, w http.ResponseWriter) error {
-	return GetRegistry(r).Save(w)
+func Save(c context.Context, r *http.Request, w http.ResponseWriter) error {
+	reg, ok := RegistryFromContext(c)
+	if !ok {
+		return ErrNoRegistry
+	}
+	return reg.Save(c, w)
 }
 
 // NewCookie returns an http.Cookie with the options set. It also sets

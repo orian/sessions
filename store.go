@@ -6,6 +6,7 @@ package sessions
 
 import (
 	"encoding/base32"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/securecookie"
+	"golang.org/x/net/context"
 )
 
 // Store is an interface for custom session stores.
@@ -21,7 +23,7 @@ import (
 // See CookieStore and FilesystemStore for examples.
 type Store interface {
 	// Get should return a cached session.
-	Get(r *http.Request, name string) (*Session, error)
+	Get(ctx context.Context, r *http.Request, name string) (*Session, error)
 
 	// New should create and return a new session.
 	//
@@ -30,7 +32,7 @@ type Store interface {
 	New(r *http.Request, name string) (*Session, error)
 
 	// Save should persist session to the underlying store implementation.
-	Save(r *http.Request, w http.ResponseWriter, s *Session) error
+	Save(ctx context.Context, r *http.Request, w http.ResponseWriter, s *Session) error
 }
 
 // CookieStore ----------------------------------------------------------------
@@ -69,6 +71,8 @@ type CookieStore struct {
 	Options *Options // default configuration
 }
 
+var ErrNoRegistry = fmt.Errorf("must provide context with Registry (RegistryWithContext method as middleware)")
+
 // Get returns a session for the given name after adding it to the registry.
 //
 // It returns a new session if the sessions doesn't exist. Access IsNew on
@@ -76,8 +80,12 @@ type CookieStore struct {
 //
 // It returns a new session and an error if the session exists but could
 // not be decoded.
-func (s *CookieStore) Get(r *http.Request, name string) (*Session, error) {
-	return GetRegistry(r).Get(s, name)
+func (s *CookieStore) Get(ctx context.Context, r *http.Request, name string) (*Session, error) {
+	reg, ok := RegistryFromContext(ctx)
+	if !ok {
+		return nil, ErrNoRegistry
+	}
+	return reg.Get(s, name)
 }
 
 // New returns a session for the given name without adding it to the registry.
@@ -102,7 +110,7 @@ func (s *CookieStore) New(r *http.Request, name string) (*Session, error) {
 }
 
 // Save adds a single session to the response.
-func (s *CookieStore) Save(r *http.Request, w http.ResponseWriter,
+func (s *CookieStore) Save(ctx context.Context, r *http.Request, w http.ResponseWriter,
 	session *Session) error {
 	encoded, err := securecookie.EncodeMulti(session.Name(), session.Values,
 		s.Codecs...)
@@ -179,8 +187,12 @@ func (s *FilesystemStore) MaxLength(l int) {
 // Get returns a session for the given name after adding it to the registry.
 //
 // See CookieStore.Get().
-func (s *FilesystemStore) Get(r *http.Request, name string) (*Session, error) {
-	return GetRegistry(r).Get(s, name)
+func (s *FilesystemStore) Get(ctx context.Context, r *http.Request, name string) (*Session, error) {
+	reg, ok := RegistryFromContext(ctx)
+	if !ok {
+		return nil, ErrNoRegistry
+	}
+	return reg.Get(s, name)
 }
 
 // New returns a session for the given name without adding it to the registry.
@@ -205,7 +217,7 @@ func (s *FilesystemStore) New(r *http.Request, name string) (*Session, error) {
 }
 
 // Save adds a single session to the response.
-func (s *FilesystemStore) Save(r *http.Request, w http.ResponseWriter,
+func (s *FilesystemStore) Save(ctx context.Context, r *http.Request, w http.ResponseWriter,
 	session *Session) error {
 	if session.ID == "" {
 		// Because the ID is used in the filename, encode it to

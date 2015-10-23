@@ -9,6 +9,8 @@ import (
 	"encoding/gob"
 	"net/http"
 	"testing"
+
+	"golang.org/x/net/context"
 )
 
 // ----------------------------------------------------------------------------
@@ -88,8 +90,9 @@ func TestFlashes(t *testing.T) {
 
 	req, _ = http.NewRequest("GET", "http://localhost:8080/", nil)
 	rsp = NewRecorder()
+	ctx := RegistryWithContext(context.TODO(), req)
 	// Get a session.
-	if session, err = store.Get(req, "session-key"); err != nil {
+	if session, err = store.Get(ctx, req, "session-key"); err != nil {
 		t.Fatalf("Error getting session: %v", err)
 	}
 	// Get a flash.
@@ -103,7 +106,7 @@ func TestFlashes(t *testing.T) {
 	// Custom key.
 	session.AddFlash("baz", "custom_key")
 	// Save.
-	if err = Save(req, rsp); err != nil {
+	if err = Save(ctx, req, rsp); err != nil {
 		t.Fatalf("Error saving session: %v", err)
 	}
 	hdr = rsp.Header()
@@ -117,8 +120,9 @@ func TestFlashes(t *testing.T) {
 	req, _ = http.NewRequest("GET", "http://localhost:8080/", nil)
 	req.Header.Add("Cookie", cookies[0])
 	rsp = NewRecorder()
+	ctx = RegistryWithContext(context.TODO(), req)
 	// Get a session.
-	if session, err = store.Get(req, "session-key"); err != nil {
+	if session, err = store.Get(ctx, req, "session-key"); err != nil {
 		t.Fatalf("Error getting session: %v", err)
 	}
 	// Check all saved values.
@@ -150,8 +154,9 @@ func TestFlashes(t *testing.T) {
 
 	req, _ = http.NewRequest("GET", "http://localhost:8080/", nil)
 	rsp = NewRecorder()
+	ctx = RegistryWithContext(context.TODO(), req)
 	// Get a session.
-	if session, err = store.Get(req, "session-key"); err != nil {
+	if session, err = store.Get(ctx, req, "session-key"); err != nil {
 		t.Fatalf("Error getting session: %v", err)
 	}
 	// Get a flash.
@@ -162,7 +167,7 @@ func TestFlashes(t *testing.T) {
 	// Add some flashes.
 	session.AddFlash(&FlashMessage{42, "foo"})
 	// Save.
-	if err = Save(req, rsp); err != nil {
+	if err = Save(ctx, req, rsp); err != nil {
 		t.Fatalf("Error saving session: %v", err)
 	}
 	hdr = rsp.Header()
@@ -177,8 +182,9 @@ func TestFlashes(t *testing.T) {
 	req, _ = http.NewRequest("GET", "http://localhost:8080/", nil)
 	req.Header.Add("Cookie", cookies[0])
 	rsp = NewRecorder()
+	ctx = RegistryWithContext(context.TODO(), req)
 	// Get a session.
-	if session, err = store.Get(req, "session-key"); err != nil {
+	if session, err = store.Get(ctx, req, "session-key"); err != nil {
 		t.Fatalf("Error getting session: %v", err)
 	}
 	// Check all saved values.
